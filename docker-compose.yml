@@ -1,0 +1,76 @@
+# версия docker-compose (не обязательно)
+version: "3.8"
+
+# желательно использовать образы на дистрибутиве alpine для экономии места
+
+# раздел описания сервисов
+services:
+
+# имя сервиса
+  web:
+    # путь к файлу Dockerfile
+    build: .
+    # команда запуска сервиса
+    command: uvicorn app:app --reload --host 0.0.0.0 --port 8000
+    # точка монтирования для хранения информации
+    volumes:
+      - .:/app
+    # проброс портов (port forwarding)
+    ports:
+      - "8000:8000"
+    # проброс переменных окружения в сервис
+    environment:
+      - DATABASE_URL=postgresql://dev:admin@db:5432/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - SMTP_PASSWORD=oyyaehwnlvdwlexy
+      - SMTP_PORT=587
+      - SMTP_HOST=smtp.yandex.ru
+      - SMTP_USER=pratayeu@yandex.ru
+    # зависимости сервиса
+    depends_on:
+      - db
+      - redis
+
+  db:
+    # образ для сервиса
+    image: postgres:15-alpine3.18
+    environment:
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=dev
+      - POSTGRES_DB=app
+      - POSTGRES_HOST_AUTH_METHOD=trust
+
+  redis:
+    image: redis:7.0.11-alpine3.18
+
+  worker:
+    build: .
+    command: celery -A src.celery:celery worker -l info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://dev:admin@db:5432/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - SMTP_PASSWORD=oyyaehwnlvdwlexy
+      - SMTP_PORT=587
+      - SMTP_HOST=smtp.yandex.ru
+      - SMTP_USER=pratayeu@yandex.ru
+    depends_on:
+      - db
+      - redis
+
+  beat:
+    build: .
+    command: celery -A src.celery:celery beat -l info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://dev:dev@127.0.0.1:5431/beg
+      - SMTP_PASSWORD=oyyaehwnlvdwlexy
+      - SMTP_PORT=587
+      - SMTP_HOST=smtp.yandex.ru
+      - SMTP_USER=serega-adamovich@yandex.ru
+    depends_on:
+      - db
